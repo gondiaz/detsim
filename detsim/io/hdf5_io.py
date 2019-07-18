@@ -19,6 +19,21 @@ class event_map(tb.IsDescription):
     nexus_evt = tb.Int32Col(shape=(), pos=0)
 
 
+def get_sensor_binning(file_in     : str,
+                       db_detector : str,
+                       run_number  : int) -> Tuple:
+    first_pmt  = DB.DataPMT (db_detector, run_number).values[0]
+    first sipm = DB.DataSiPM(db_detector, run_number).values[0]
+    first_evt  = next(iter(load_mcsensor_response(file_in, (0, 1)).values()))
+
+    ## Assumes all PMTs present, valid?
+    pmt_width  = first_evt[first_pmt].bin_width
+    sipm_indx  = np.where(np.array(tuple(first_evt)) >= first_sipm)[0][0]
+    sipm_width = first_evt[tuple(first_evt)[sipm_indx]].bin_width
+
+    return pmt_width, sipm_width
+
+
 @wraps(rwf_writer)
 def buffer_writer(h5out, *,
                   group_name  : str = 'detsim',
@@ -67,28 +82,28 @@ def buffer_writer(h5out, *,
     return write_buffers
 
 
-def load_sensors(fine_name : str,
-                 db_file   : str,
-                 run_no    : int) -> Callable[[], Generator[Tuple, None, None]]:
+def load_sensors(file_names : str,
+                 db_file    : str,
+                 run_no     : int) -> Generator[Tuple, None, None]:
 
     all_evt = load_mcsensor_response(file_name)
 
     ## Generalisable for an all sipm detector?
-    pmt_ids = DB.DataPMT (db_file, run_no).SensorID.values
+    pmt_ids = DB.DataPMT(db_file, run_no).SensorID.values
     #sipm_ids = DB.DataSiPM(db_file, run_no).SensorID.values
 
-    def read_sensors() -> Generator[Tuple, None, None]:
-        for evt, wfs in all_evt.items():
-            pmt_ord  = []
-            pmt_wfs  = []
-            sipm_ord = []
-            sipm_wfs = []
-            for sens_id, wf in wfs.items():
-                if sens_id in pmt_ids:
-                    pmt_ord .append(sens_id)
-                    pmt_wfs .append(     wf)
-                else:
-                    sipm_ord.append(sens_id)
-                    sipm_wfs.append(     wf)
-            yield evt, pmt_ord, pmt_wfs, sipm_ord, sipm_wfs
-    return read_sensors
+    for evt, wfs in all_evt.items():
+        pmt_ord  = []
+        pmt_wfs  = []
+        sipm_ord = []
+        sipm_wfs = []
+        for sens_id, wf in wfs.items():
+            if sens_id in pmt_ids:
+                pmt_ord .append(sens_id)
+                pmt_wfs .append(     wf)
+            else:
+                sipm_ord.append(sens_id)
+                sipm_wfs.append(     wf)
+        yield dict(evt = evt,
+                   pmt_ord  =  pmt_ord, pmt_wfs  =  pmt_wfs,
+                   sipm_ord = sipm_ord, sipm_wfs = sipm_wfs)
