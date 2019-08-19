@@ -1,4 +1,5 @@
 import numpy  as np
+import pandas as pd
 import tables as tb
 
 from functools import     wraps
@@ -7,11 +8,12 @@ from typing    import Generator
 from typing    import     Tuple
 from typing    import      List
 
-from invisible_cities.database           import                load_db as  DB
-from invisible_cities.io      .mcinfo_io import load_mcsensor_response
-from invisible_cities.io      .mcinfo_io import    read_mcsns_response
-from invisible_cities.io      .rwf_io    import             rwf_writer
-from invisible_cities.reco               import          tbl_functions as tbl
+from invisible_cities.database           import                   load_db as  DB
+from invisible_cities.io      .mcinfo_io import load_mcsensor_response_df
+from invisible_cities.io      .mcinfo_io import    load_mcsensor_response
+from invisible_cities.io      .mcinfo_io import       read_mcsns_response
+from invisible_cities.io      .rwf_io    import                rwf_writer
+from invisible_cities.reco               import             tbl_functions as tbl
 
 
 class EventInfo(tb.IsDescription):
@@ -159,42 +161,90 @@ def buffer_writer(h5out, *,
     return write_buffers
 
 
-@wraps(read_mcsns_response)
 def load_sensors(file_names : List[str],
                  db_file    :      str ,
                  run_no     :      int ) -> Generator[Tuple, None, None]:
-    """
-    Reads in the mcinfo and the full simulation
-    waveforms and returns a dictionary with the
-    necessary information for buffer positioning
-    """
 
-    ## Generalisable for an all sipm detector?
     pmt_ids  = DB.DataPMT (db_file, run_no).SensorID
     sipm_ids = DB.DataSiPM(db_file, run_no).SensorID
 
     for file_name in file_names:
-        with tb.open_file(file_name, 'r') as h5in:
 
-            all_evt = read_mcsns_response(h5in)
+        (all_evt    ,
+         pmt_binwid ,
+         sipm_binwid,
+         all_wf     ) = load_mcsensor_response_df(file_name, db_file, run_no)
+
+        with tb.open_file(file_name, 'r') as h5in:
 
             mc_info = tbl.get_mc_info(h5in)
 
             timestamps = event_timestamp(h5in)
 
-            for evt, wfs in all_evt.items():
-                pmt_ord  = []
-                pmt_wfs  = []
-                sipm_ord = []
-                sipm_wfs = []
-                for sens_id, wf in wfs.items():
-                    if pmt_ids.isin([sens_id]).any():
-                    #if sens_id in pmt_ids:
-                        pmt_ord .append(pmt_ids .index[pmt_ids  == sens_id][0])
-                        pmt_wfs .append(wf)
-                    else:
-                        sipm_ord.append(sipm_ids.index[sipm_ids == sens_id][0])
-                        sipm_wfs.append(wf)
-                yield dict(evt = evt, mc = mc_info, timestamp = timestamps(),
-                           pmt_ord  =  pmt_ord, pmt_wfs  =  pmt_wfs,
-                           sipm_ord = sipm_ord, sipm_wfs = sipm_wfs)
+            for evt in all_evt:
+
+                pmt_wfs  = all_wf.loc[evt].loc[ pmt_ids]
+                sipm_wfs = all_wf.loc[evt].loc[sipm_ids]
+
+                yield dict(evt         = evt         ,
+                           mc          = mc_info     ,
+                           timestamp   = timestamps(),
+                           pmt_binwid  = pmt_binwid  ,
+                           sipm_binwid = sipm_binwid ,
+                           pmt_wfs     = pmt_wfs     ,
+                           sipm_wfs    = sipm_wfs    )
+
+
+## !! This uses a copy of the fanal function load_mc_hits
+## !! Will be imported and wrapped as necessary once
+## !! moved to IC
+def load_hits(file_names : List[str]) -> Generator:
+
+    for file_name in file_names:
+        with tb.open_file(file_name) as h5in:
+
+            extents    = pd.read_hdf(file_name, 'MC/extents')
+
+            event_ids  = extents.evt_number
+
+            hits_df    = load_mc_hits(file_name, extents)
+
+            mc_info    = tbl.get_mc_info(h5in)
+
+            timestamps = event_timestamp(h5in)
+
+            for evt in event_ids:
+                yield dict(evt       = evt                ,
+                           mc        = mc_info            ,
+                           timestamp = timestamp()        ,
+                           hits      = hits_df.loc[evt, :])
+
+
+## !! This code temporarily copied/adapted from FANAL
+def load_mc_hits(h5in    : tb.file.File,
+                 extents : pd.DataFrame) -> pd.DataFrame:
+
+    hits_tb  = h5in.root.MC.hits
+
+    # Generating hits DataFrame
+    hits = pd.DataFrame({'hit_id'      : hits_tb.col('hit_indx'),
+                         'particle_id' : hits_tb.col('particle_indx'),
+                         'label'       : hits_tb.col('label').astype('U13'),
+                         'time'        : hits_tb.col('hit_time'),
+                         'x'           : hits_tb.col('hit_position')[:, 0],
+                         'y'           : hits_tb.col('hit_position')[:, 1],
+                         'z'           : hits_tb.col('hit_position')[:, 2],
+                         'E'           : hits_tb.col('hit_energy')})
+
+    evt_hit_df = extents[['last_hit', 'evt_number']]
+    evt_hit_df.set_index('last_hit', inplace = True)
+
+    hits = hits.merge(evt_hit_df, left_index=True, right_index=True, how='left')
+    hits.rename(columns={"evt_number": "event_id"}, inplace = True)
+    hits.event_id.fillna(method='bfill', inplace = True)
+    hits.event_id = hits.event_id.astype(int)
+
+    # Setting the indexes
+    hits.set_index(['event_id', 'particle_id', 'hit_id'], inplace=True)
+
+    return hits

@@ -11,9 +11,9 @@ from pytest import fixture
 from pytest import    mark
 from pytest import  raises
 
-from invisible_cities.detsim.buffer_functions  import      calculate_buffers
-from invisible_cities.io    .mcinfo_io         import load_mcsensor_response
-from invisible_cities.core  .system_of_units_c import                  units
+from invisible_cities.detsim.buffer_functions  import         calculate_buffers
+from invisible_cities.io    .mcinfo_io         import load_mcsensor_response_df
+from invisible_cities.core  .system_of_units_c import                     units
 
 from . hdf5_io   import      save_run_info
 from . hdf5_io   import get_sensor_binning
@@ -24,8 +24,8 @@ from ..util.util import      trigger_times
 
 @fixture(scope = 'module')
 def sensor_binning(fullsim_data):
-    data_in = load_mcsensor_response(fullsim_data)
-    return np.unique([wf.bin_width for wf in data_in[0].values()])
+    _, pmt_wid, sipm_wid, _ = load_mcsensor_response_df(fullsim_data, 'new', -6400)
+    return pmt_wid, sipm_wid
 
 
 def test_save_run_info(config_tmpdir):
@@ -78,14 +78,17 @@ def test_event_timestamp(fullsim_data):
 
 
 @fixture(scope = 'module')
-def event_definitions():
+def event_definitions(sensor_binning):
     len_energy    = 100
     len_tracking  =  10
 
     buffer_length =   10
     pre_trigger   =    5
 
-    calculate_buffers_ = calculate_buffers(buffer_length, pre_trigger)
+    pmt_binwid, sipm_binwid = sensor_binning
+
+    calculate_buffers_ = calculate_buffers(buffer_length, pre_trigger,
+                                           pmt_binwid   , sipm_binwid)
 
     pmt_bins  = np.arange(300, 13000000,  100)
     sipm_bins = np.arange(0  , 13000000, 1000)
@@ -104,8 +107,10 @@ def test_buffer_writer(config_tmpdir, event_definitions,
 
     evt_times = trigger_times(triggers, 0, pmt_bins)
 
-    pmtwf  = np.random.poisson(5, (len( pmt_orders),  pmt_bins.shape[0]))
-    sipmwf = np.random.poisson(5, (len(sipm_orders), sipm_bins.shape[0]))
+    pmtwf_  = np.random.poisson(5, (len( pmt_orders),  pmt_bins.shape[0]))
+    pmtwf   = pd.Series(pmtwf_ .tolist(),  pmt_orders)
+    sipmwf_ = np.random.poisson(5, (len(sipm_orders), sipm_bins.shape[0]))
+    sipmwf  = pd.Series(sipmwf_.tolist(), sipm_orders)
     
     buffers = calc_buffers(triggers, pmt_bins, pmtwf, sipm_bins, sipmwf)
 
@@ -144,12 +149,12 @@ def test_buffer_writer(config_tmpdir, event_definitions,
         for i, (trg, pre, pos) in enumerate(zip(triggers, pmt_presamp, pmt_possamp)):
             file_pmt_sum  = np.sum(np.array(pmts[i])[pmt_orders], axis=1)
             slice_        = slice(max(0, trg - pre),
-                                  min(pmtwf.shape[1] - 1, trg + pos))
-            assert np.all(file_pmt_sum == np.sum(pmtwf[:, slice_], axis=1))
+                                  min(pmtwf_.shape[1] - 1, trg + pos))
+            assert np.all(file_pmt_sum == np.sum(pmtwf_[:, slice_], axis=1))
 
         for i, sibin in enumerate(sipm_bin):
 
             file_sipm_sum = np.sum(np.array(sipms[i])[sipm_orders], axis=1)
             slice_        = slice(max(0, sibin - sipm_presamp),
-                                  min(sipmwf.shape[1] -1, sibin + sipm_possamp))
-            assert np.all(file_sipm_sum == np.sum(sipmwf[:, slice_], axis=1))
+                                  min(sipmwf_.shape[1] -1, sibin + sipm_possamp))
+            assert np.all(file_sipm_sum == np.sum(sipmwf_[:, slice_], axis=1))
