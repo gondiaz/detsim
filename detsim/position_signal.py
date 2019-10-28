@@ -18,25 +18,30 @@ from functools import   wraps
 from functools import partial
 from typing    import   Tuple
 
-from detsim.io  .hdf5_io import      buffer_writer
-from detsim.io  .hdf5_io import get_sensor_binning
-from detsim.io  .hdf5_io import       load_sensors
-from detsim.io  .hdf5_io import      save_run_info
-from detsim.util.util    import      trigger_times
+from detsim.io        .hdf5_io          import      buffer_writer
+#from detsim.io        .hdf5_io          import get_sensor_binning
+from detsim.io        .hdf5_io          import       load_sensors
+from detsim.io        .hdf5_io          import      save_run_info
+from detsim.util      .util             import      trigger_times
+from detsim.simulation.buffer_functions import  calculate_binning
+from detsim.simulation.buffer_functions import  calculate_buffers
+from detsim.simulation.buffer_functions import     trigger_finder
 
-from invisible_cities.core    .configure         import         configure
-from invisible_cities.core    .system_of_units_c import             units
-from invisible_cities.database.load_db           import           DataPMT
-from invisible_cities.database.load_db           import          DataSiPM
-from invisible_cities.dataflow                   import          dataflow as  fl
-from invisible_cities.dataflow.dataflow          import              fork
-from invisible_cities.dataflow.dataflow          import              push
-from invisible_cities.dataflow.dataflow          import              pipe
-from invisible_cities.detsim  .buffer_functions  import calculate_binning
-from invisible_cities.detsim  .buffer_functions  import calculate_buffers
-from invisible_cities.detsim  .buffer_functions  import    trigger_finder
-from invisible_cities.io      .mcinfo_io         import    mc_info_writer
-from invisible_cities.reco                       import     tbl_functions as tbl
+from invisible_cities.core    .configure         import          configure
+from invisible_cities.core    .system_of_units_c import              units
+from invisible_cities.database.load_db           import            DataPMT
+from invisible_cities.database.load_db           import           DataSiPM
+#from invisible_cities.detsim  .buffer_functions  import calculate_binning
+#from invisible_cities.detsim  .buffer_functions  import calculate_buffers
+#from invisible_cities.detsim  .buffer_functions  import    trigger_finder
+from invisible_cities.io      .mcinfo_io         import     mc_info_writer
+from invisible_cities.io      .mcinfo_io         import get_sensor_binning
+from invisible_cities.reco                       import      tbl_functions as tbl
+
+from invisible_cities.dataflow          import dataflow as fl
+from invisible_cities.dataflow.dataflow import     fork
+from invisible_cities.dataflow.dataflow import     push
+from invisible_cities.dataflow.dataflow import     pipe
 
 
 def bin_minmax(sensor_binning : np.ndarray) -> Tuple:
@@ -75,9 +80,9 @@ def position_signal(conf):
     compression   =                         conf.compression
 
     npmt, nsipm        = get_no_sensors(detector_db, run_number)
-    pmt_wid, sipm_wid  = get_sensor_binning(files_in[0],
-                                            detector_db,
-                                             run_number)
+    pmt_wid, sipm_wid  = get_sensor_binning(files_in[0])#,
+                                            #detector_db,
+                                            # run_number)
     nsamp_pmt          = int(buffer_length * units.mus /  pmt_wid)
     nsamp_sipm         = int(buffer_length * units.mus / sipm_wid)
 

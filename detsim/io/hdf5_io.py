@@ -11,6 +11,7 @@ from typing    import      List
 from invisible_cities.database           import                   load_db as  DB
 from invisible_cities.io      .mcinfo_io import load_mcsensor_response_df
 from invisible_cities.io      .mcinfo_io import    load_mcsensor_response
+from invisible_cities.io      .mcinfo_io import              load_mc_hits
 from invisible_cities.io      .mcinfo_io import       read_mcsns_response
 from invisible_cities.io      .rwf_io    import                rwf_writer
 from invisible_cities.reco               import             tbl_functions as tbl
@@ -54,25 +55,25 @@ def save_run_info(h5out      : tb.file.File,
     row.append()
 
 
-def get_sensor_binning(file_in     : str,
-                       db_detector : str,
-                       run_number  : int) -> Tuple:
-    """
-    Returns the bin width for the sensor information
-    read from file using the widths given in the
-    first recorded event.
-    """
+## def get_sensor_binning(file_in     : str,
+##                        db_detector : str,
+##                        run_number  : int) -> Tuple:
+##     """
+##     Returns the bin width for the sensor information
+##     read from file using the widths given in the
+##     first recorded event.
+##     """
 
-    first_pmt  = DB.DataPMT (db_detector, run_number).SensorID.values[0]
-    first_sipm = DB.DataSiPM(db_detector, run_number).SensorID.values[0]
-    first_evt  = next(iter(load_mcsensor_response(file_in, (0, 1)).values()))
+##     first_pmt  = DB.DataPMT (db_detector, run_number).SensorID.values[0]
+##     first_sipm = DB.DataSiPM(db_detector, run_number).SensorID.values[0]
+##     first_evt  = next(iter(load_mcsensor_response(file_in, (0, 1)).values()))
 
-    ## Assumes all PMTs present, valid?
-    pmt_width  = first_evt[first_pmt].bin_width
-    sipm_indx  = np.where(np.array(tuple(first_evt)) >= first_sipm)[0][0]
-    sipm_width = first_evt[tuple(first_evt)[sipm_indx]].bin_width
+##     ## Assumes all PMTs present, valid?
+##     pmt_width  = first_evt[first_pmt].bin_width
+##     sipm_indx  = np.where(np.array(tuple(first_evt)) >= first_sipm)[0][0]
+##     sipm_width = first_evt[tuple(first_evt)[sipm_indx]].bin_width
 
-    return pmt_width, sipm_width
+##     return pmt_width, sipm_width
 
 
 def event_timestamp(file_in : tb.file.File) -> Callable:
@@ -134,11 +135,11 @@ def buffer_writer(h5out, *,
                                        "event, timestamp & nexus evt for each index",
                                        tbl.filters(compression))
 
-    def write_buffers(nexus_evt      :          int ,
-                      eng_sens_order :   List[  int],
-                      trk_sens_order :   List[  int],
-                      timestamps     :   List[  int],
-                      events         :   List[Tuple]) -> None:
+    def write_buffers(nexus_evt      :        int ,
+                      eng_sens_order : List[  int],
+                      trk_sens_order : List[  int],
+                      timestamps     : List[  int],
+                      events         : List[Tuple]) -> None:
 
         for t_stamp, (eng, trk) in zip(timestamps, events):
             row = nexus_evt_tbl.row
@@ -221,30 +222,30 @@ def load_hits(file_names : List[str]) -> Generator:
 
 
 ## !! This code temporarily copied/adapted from FANAL
-def load_mc_hits(h5in    : tb.file.File,
-                 extents : pd.DataFrame) -> pd.DataFrame:
+## def load_mc_hits(h5in    : tb.file.File,
+##                  extents : pd.DataFrame) -> pd.DataFrame:
 
-    hits_tb  = h5in.root.MC.hits
+##     hits_tb  = h5in.root.MC.hits
 
-    # Generating hits DataFrame
-    hits = pd.DataFrame({'hit_id'      : hits_tb.col('hit_indx'),
-                         'particle_id' : hits_tb.col('particle_indx'),
-                         'label'       : hits_tb.col('label').astype('U13'),
-                         'time'        : hits_tb.col('hit_time'),
-                         'x'           : hits_tb.col('hit_position')[:, 0],
-                         'y'           : hits_tb.col('hit_position')[:, 1],
-                         'z'           : hits_tb.col('hit_position')[:, 2],
-                         'E'           : hits_tb.col('hit_energy')})
+##     # Generating hits DataFrame
+##     hits = pd.DataFrame({'hit_id'      : hits_tb.col('hit_indx'),
+##                          'particle_id' : hits_tb.col('particle_indx'),
+##                          'label'       : hits_tb.col('label').astype('U13'),
+##                          'time'        : hits_tb.col('hit_time'),
+##                          'x'           : hits_tb.col('hit_position')[:, 0],
+##                          'y'           : hits_tb.col('hit_position')[:, 1],
+##                          'z'           : hits_tb.col('hit_position')[:, 2],
+##                          'E'           : hits_tb.col('hit_energy')})
 
-    evt_hit_df = extents[['last_hit', 'evt_number']]
-    evt_hit_df.set_index('last_hit', inplace = True)
+##     evt_hit_df = extents[['last_hit', 'evt_number']]
+##     evt_hit_df.set_index('last_hit', inplace = True)
 
-    hits = hits.merge(evt_hit_df, left_index=True, right_index=True, how='left')
-    hits.rename(columns={"evt_number": "event_id"}, inplace = True)
-    hits.event_id.fillna(method='bfill', inplace = True)
-    hits.event_id = hits.event_id.astype(int)
+##     hits = hits.merge(evt_hit_df, left_index=True, right_index=True, how='left')
+##     hits.rename(columns={"evt_number": "event_id"}, inplace = True)
+##     hits.event_id.fillna(method='bfill', inplace = True)
+##     hits.event_id = hits.event_id.astype(int)
 
-    # Setting the indexes
-    hits.set_index(['event_id', 'particle_id', 'hit_id'], inplace=True)
+##     # Setting the indexes
+##     hits.set_index(['event_id', 'particle_id', 'hit_id'], inplace=True)
 
-    return hits
+##     return hits
