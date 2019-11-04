@@ -55,27 +55,6 @@ def save_run_info(h5out      : tb.file.File,
     row.append()
 
 
-## def get_sensor_binning(file_in     : str,
-##                        db_detector : str,
-##                        run_number  : int) -> Tuple:
-##     """
-##     Returns the bin width for the sensor information
-##     read from file using the widths given in the
-##     first recorded event.
-##     """
-
-##     first_pmt  = DB.DataPMT (db_detector, run_number).SensorID.values[0]
-##     first_sipm = DB.DataSiPM(db_detector, run_number).SensorID.values[0]
-##     first_evt  = next(iter(load_mcsensor_response(file_in, (0, 1)).values()))
-
-##     ## Assumes all PMTs present, valid?
-##     pmt_width  = first_evt[first_pmt].bin_width
-##     sipm_indx  = np.where(np.array(tuple(first_evt)) >= first_sipm)[0][0]
-##     sipm_width = first_evt[tuple(first_evt)[sipm_indx]].bin_width
-
-##     return pmt_width, sipm_width
-
-
 def event_timestamp(file_in : tb.file.File) -> Callable:
     """
     Returns a function giving access to the next
@@ -219,33 +198,3 @@ def load_hits(file_names : List[str]) -> Generator:
                            mc        = mc_info            ,
                            timestamp = timestamp()        ,
                            hits      = hits_df.loc[evt, :])
-
-
-## !! This code temporarily copied/adapted from FANAL
-## def load_mc_hits(h5in    : tb.file.File,
-##                  extents : pd.DataFrame) -> pd.DataFrame:
-
-##     hits_tb  = h5in.root.MC.hits
-
-##     # Generating hits DataFrame
-##     hits = pd.DataFrame({'hit_id'      : hits_tb.col('hit_indx'),
-##                          'particle_id' : hits_tb.col('particle_indx'),
-##                          'label'       : hits_tb.col('label').astype('U13'),
-##                          'time'        : hits_tb.col('hit_time'),
-##                          'x'           : hits_tb.col('hit_position')[:, 0],
-##                          'y'           : hits_tb.col('hit_position')[:, 1],
-##                          'z'           : hits_tb.col('hit_position')[:, 2],
-##                          'E'           : hits_tb.col('hit_energy')})
-
-##     evt_hit_df = extents[['last_hit', 'evt_number']]
-##     evt_hit_df.set_index('last_hit', inplace = True)
-
-##     hits = hits.merge(evt_hit_df, left_index=True, right_index=True, how='left')
-##     hits.rename(columns={"evt_number": "event_id"}, inplace = True)
-##     hits.event_id.fillna(method='bfill', inplace = True)
-##     hits.event_id = hits.event_id.astype(int)
-
-##     # Setting the indexes
-##     hits.set_index(['event_id', 'particle_id', 'hit_id'], inplace=True)
-
-##     return hits
