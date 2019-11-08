@@ -86,7 +86,7 @@ def buffer_writer(h5out, *,
                   length_trk  : int           ) -> Callable[[int, List, List, List], None]:
     """
     Generalised buffer writer which defines a raw waveform writer
-    for each type of sensor as well as a event info writer
+    for each type of sensor as well as an event info writer
     with written event, timestamp and a mapping to the
     nexus event number in case of event splitting.
     """
