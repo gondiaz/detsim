@@ -11,7 +11,7 @@ from typing    import      List
 from invisible_cities.database           import                   load_db as  DB
 from invisible_cities.io      .mcinfo_io import load_mcsensor_response_df
 from invisible_cities.io      .mcinfo_io import    load_mcsensor_response
-from invisible_cities.io      .mcinfo_io import              load_mc_hits
+from invisible_cities.io      .mcinfo_io import            load_mchits_df
 from invisible_cities.io      .mcinfo_io import       read_mcsns_response
 from invisible_cities.io      .rwf_io    import                rwf_writer
 from invisible_cities.reco               import             tbl_functions as tbl
@@ -187,7 +187,7 @@ def load_hits(file_names : List[str]) -> Generator:
 
             event_ids  = extents.evt_number
 
-            hits_df    = load_mc_hits(file_name, extents)
+            hits_df    = load_mchits_df(file_name, extents)
 
             mc_info    = tbl.get_mc_info(h5in)
 
