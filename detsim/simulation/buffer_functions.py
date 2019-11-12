@@ -17,7 +17,7 @@ from functools import  partial
 
 @wraps(np.histogram)
 def weighted_histogram(data : pd.DataFrame, bins : np.ndarray) -> np.ndarray:
-    return np.histogram(data.times, weights=data.charge, bins=bins)[0]
+    return np.histogram(data.time, weights=data.charge, bins=bins)[0]
 
 
 def padder(sensors : np.ndarray, padding : Tuple) -> np.ndarray:
@@ -123,8 +123,8 @@ def calculate_binning(max_buffer : int) -> Callable:
             As t_min but the maximum to be used
         """
         if t_min is None or t_max is None:
-            min_time = sensors.times.min()
-            max_time = min(sensors.times.max()  ,
+            min_time = sensors.time.min()
+            max_time = min(sensors.time.max()  ,
                            min_time + max_buffer)
             min_bin  = np.floor(min_time / bin_width) * bin_width
             max_bin  = np.floor(max_time / bin_width) * bin_width
