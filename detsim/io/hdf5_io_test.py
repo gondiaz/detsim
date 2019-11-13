@@ -11,21 +11,16 @@ from pytest import fixture
 from pytest import    mark
 from pytest import  raises
 
-from invisible_cities.detsim.buffer_functions  import         calculate_buffers
-from invisible_cities.io    .mcinfo_io         import load_mcsensor_response_df
-from invisible_cities.core  .system_of_units_c import                     units
+from invisible_cities.io  .mcinfo_io         import load_mcsensor_response_df
+from invisible_cities.io  .mcinfo_io         import        get_sensor_binning
+from invisible_cities.core.system_of_units_c import                     units
 
 from . hdf5_io   import      save_run_info
-from . hdf5_io   import get_sensor_binning
 from . hdf5_io   import    event_timestamp
 from . hdf5_io   import      buffer_writer
-from ..util.util import      trigger_times
 
-
-@fixture(scope = 'module')
-def sensor_binning(fullsim_data):
-    _, pmt_wid, sipm_wid, _ = load_mcsensor_response_df(fullsim_data, 'new', -6400)
-    return pmt_wid, sipm_wid
+from ..simulation.buffer_functions import calculate_buffers
+from ..util      .util             import     trigger_times
 
 
 def test_save_run_info(config_tmpdir):
@@ -42,20 +37,6 @@ def test_save_run_info(config_tmpdir):
         assert 'Run'     in h5saved.root
         assert 'runInfo' in h5saved.root.Run
         assert h5saved.root.Run.runInfo[0][0] == run_number
-
-
-def test_get_sensor_binning(fullsim_data, sensor_binning):
-
-    detector_db = 'new'
-    run_number  = -6400
-
-    binning = get_sensor_binning(fullsim_data,
-                                 detector_db ,
-                                 run_number  )
-
-    assert len(binning) == 2
-    assert binning[0] in sensor_binning
-    assert binning[1] in sensor_binning
 
 
 def test_event_timestamp(fullsim_data):
@@ -78,14 +59,14 @@ def test_event_timestamp(fullsim_data):
 
 
 @fixture(scope = 'module')
-def event_definitions(sensor_binning):
+def event_definitions(fullsim_data):
     len_energy    = 100
     len_tracking  =  10
 
-    buffer_length =   10
-    pre_trigger   =    5
+    buffer_length =  10
+    pre_trigger   =   5
 
-    pmt_binwid, sipm_binwid = sensor_binning
+    pmt_binwid, sipm_binwid = get_sensor_binning(fullsim_data)
 
     calculate_buffers_ = calculate_buffers(buffer_length, pre_trigger,
                                            pmt_binwid   , sipm_binwid)
