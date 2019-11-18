@@ -1,0 +1,26 @@
+language: generic
+sudo:     false
+
+matrix:
+  fast_finish: true
+  allow_failures:
+  - os: osx
+
+env:
+  - IC_PYTHON_VERSION=3.7
+
+os:
+  - linux
+  - osx
+
+branches:
+  except:
+    - /^docs\..*$/
+
+install:
+  - git clone https://github.com/nextic/IC $HOME/IC
+  - cd $HOME/IC; source manage.sh install ${IC_PYTHON_VERSION}; cd -
+  - source detsim_setup.sh
+
+script:
+  - HYPOTHESIS_PROFILE=hard pytest --instafail --no-success-flaky-report
