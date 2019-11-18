@@ -3,9 +3,9 @@ import numpy as np
 from pytest import fixture
 from pytest import    mark
 
-from ..database                   import                   load_db as DB
-from ..io      .mcinfo_io         import load_mcsensor_response_df
-from ..core    .system_of_units_c import                     units
+from invisible_cities.database                   import                   load_db as DB
+from invisible_cities.io      .mcinfo_io         import load_mcsensor_response_df
+from invisible_cities.core    .system_of_units_c import                     units
 
 from . buffer_functions           import         calculate_binning
 from . buffer_functions           import         calculate_buffers
@@ -13,9 +13,8 @@ from . buffer_functions           import            trigger_finder
 
 
 @fixture(scope="module")
-def mc_waveforms(mc_sensors_nexus_data):
-    sensor_data, *_ = mc_sensors_nexus_data
-    return load_mcsensor_response_df(sensor_data, 'new', 6400)
+def mc_waveforms(fullsim_data):
+    return load_mcsensor_response_df(fullsim_data, 'new', -6400)
 
 
 ## !! to-do: generalise for all detector configurations
