@@ -197,3 +197,18 @@ def load_hits(file_names : List[str]) -> Generator:
                            mc        = mc_info            ,
                            timestamp = timestamp()        ,
                            hits      = hits_df.loc[evt, :])
+
+
+def mchits_from_files(paths : List[str]) -> Generator:
+    """
+    Yields dictionaries of {event_number: hits} for processing.
+    """
+    for path in paths:
+        try:
+            events = load_mchits(path)
+        except tb.exceptions.NoSuchNodeError:
+            continue
+
+        for evt,hits in events.items():
+            yield dict(evt       = evt,
+                       hits      = hits)
