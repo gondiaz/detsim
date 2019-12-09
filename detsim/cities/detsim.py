@@ -157,8 +157,8 @@ def detsim(files_in, file_out, compression, event_range, print_mod, detector_db,
                                            "evt_times", "buffers"))
 
         save_run_info(h5out, run_number)
-        #return push(source = load_sensors(files_in, detector_db, run_number),
-        return push(source = mchits_from_files(files_in),
+        return push(source = load_sensors(files_in, detector_db, run_number),
+        #return push(source = mchits_from_files(files_in),
                     pipe   = pipe(simulate_s1_        ,
                                   s1_at_pmt_          ,
                                   generate_ie_        ,
