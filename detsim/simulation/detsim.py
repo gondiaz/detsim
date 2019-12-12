@@ -75,7 +75,7 @@ class DetSimParameters(Singleton):
     and re-voxelization size (mm) of the diffused electrons
     """
 
-    def __init__(self):
+    def __init__(self, detector = 'new', run_number = -1):
 
         self.ws                     = 60.0 * units.eV
         self.wi                     = 22.4 * units.eV
@@ -107,21 +107,44 @@ class DetSimParameters(Singleton):
         self.nsipms_side            = 22
         self.sipm_pitch             =  10  * units.mm
 
-        self.dummy_detector()
+        if (detector == 'dummy'):
+            self.dummy_detector()
+        else:
+            self.next_detector(detector, run_number)
 
     def dummy_detector(self):
 
         self.x_pmts   = np.zeros(self.npmts)
         self.y_pmts   = np.zeros(self.npmts)
+        self.adc_to_pes_pmts = np.ones(self.npmts)
 
         indices       = np.arange(-self.nsipms_side, self.nsipms_side + 1)
         self.sipms    = [(self.sipm_pitch * i, self.sipm_pitch * j) for i in indices for j in indices]
         self.nsipms   = len(self.sipms)
 
         self.nsipms   = len(self.sipms)
+        self.adc_to_pes_sipms = np.ones(self.nsipms)
 
         self.x_sipms  = np.array([sipm[0] for sipm in self.sipms])
         self.y_sipms  = np.array([sipm[1] for sipm in self.sipms])
+
+        self.xybins   = bins_edges(np.sort(self.x_sipms), 0.5 * self.sipm_pitch), \
+                        bins_edges(np.sort(self.y_sipms), 0.5 * self.sipm_pitch)
+
+
+    def next_detector(self, detector = 'new', run_number = -1):
+
+        db_pmts  = db.DataPMT (detector, run_number)
+        self.x_pmts          = db_pmts['X']         .values
+        self.y_pmts          = db_pmts['Y']         .values
+        self.adc_to_pes_pmts = db_pmts['adc_to_pes'].values
+        self.npmts           = len(self.x_pmts)
+
+        db_sipms = db.DataSiPM(detector, run_number)
+        self.x_sipms          = db_sipms['X']         .values
+        self.y_sipms          = db_sipms['Y']         .values
+        self.adc_to_pes_sipms = db_sipms['adc_to_pes'].values
+        self.nsipms           = len(self.x_sipms)
 
         self.xybins   = bins_edges(np.sort(self.x_sipms), 0.5 * self.sipm_pitch), \
                         bins_edges(np.sort(self.y_sipms), 0.5 * self.sipm_pitch)
@@ -134,7 +157,6 @@ class DetSimParameters(Singleton):
 #        self.xybins   = vx.bins_edges(np.sort(detsimparams.x_sipms), 0.5 * sipm_pitch), vx.bins_edges(np.sort(detsimparams.y_sipms), 0.5 * sipm_pitch)
 
 detsimparams = DetSimParameters()
-
 
 #
 #  Secondary electrons
@@ -240,7 +262,7 @@ def estimate_pes_at_sensors(xs        : np.array,  # nelectrons
     It returns an array of pes with nelectrons x nsensors shape.
     """
     dxs     = xs[:, np.newaxis] - x_sensors
-    dys     = xs[:, np.newaxis] - y_sensors
+    dys     = ys[:, np.newaxis] - y_sensors
     photons = photons[:, np.newaxis] + np.zeros_like(x_sensors)
 
     pes = photons * psf(dxs, dys)
@@ -269,7 +291,8 @@ def create_wfs(ts             : np.array, # nelectrons
                wf_buffer_time : float = detsimparams.wf_buffer_time,
                wf_bin_time    : float = detsimparams.wf_pmt_bin_time,
                el_time_sample : float = detsimparams.EL_pmt_time_sample,
-               el_time        : float = detsimparams.EL_dtime):
+               el_time        : float = detsimparams.EL_dtime,
+               adc_to_pes     : np.array = detsimparams.adc_to_pes_pmts): # nsensors
     """ create the wfs starting drom the pes produced per electrons and each sensor
     the control parameters are the wf_bin_time and the el_time_sample,
     by default they are the same parameters.
@@ -302,7 +325,7 @@ def create_wfs(ts             : np.array, # nelectrons
 
     [_wf(ts, ipes, iwf) for ipes, iwf in zip(pes.T, wfs.T)]
 
-    return wftimes, wfs
+    return wftimes, wfs * adc_to_pes
 
 create_wfs_pmts= create_wfs
 
@@ -310,8 +333,10 @@ def create_wfs_sipms(ts, pes,
                          wf_buffer_time : float = detsimparams.wf_buffer_time,
                          wf_bin_time    : float = detsimparams.wf_sipm_bin_time,
                          el_time_sample : float = detsimparams.EL_sipm_time_sample,
-                         el_time        : float = detsimparams.EL_dtime):
-    return create_wfs(ts, pes, wf_buffer_time, wf_bin_time, el_time_sample, el_time)
+                         el_time        : float = detsimparams.EL_dtime,
+                         adc_to_pes     : np.array = detsimparams.adc_to_pes_sipms):
+    return create_wfs(ts, pes, wf_buffer_time, wf_bin_time,
+                      el_time_sample, el_time, adc_to_pes)
 
 
 #
