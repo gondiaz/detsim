@@ -18,4 +18,4 @@ except ModuleNotFoundError:
         traceback.print_exc()
         exit(1)
 else:
-    city_function("detsim",**configure(args))
+    city_function(**configure(args))

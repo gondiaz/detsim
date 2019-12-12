@@ -140,6 +140,61 @@ def buffer_writer(h5out, *,
     return write_buffers
 
 
+def wf_writer(h5out, *,
+                  group_name  : str = 'detsim',
+                  compression : str =  'ZLIB4',
+                  n_sens_eng  : int =       12,
+                  n_sens_trk  : int =     1792,
+                  length_eng  : int           ,
+                  length_trk  : int           ) -> Callable[[int, List, List, List], None]:
+    """
+    Generalised buffer writer which defines a raw waveform writer
+    for each type of sensor as well as an event info writer
+    with written event, timestamp and a mapping to the
+    nexus event number in case of event splitting.
+    """
+
+    eng_writer = rwf_writer(h5out,
+                            group_name      =  group_name,
+                            compression     = compression,
+                            table_name      =     'pmtrd',
+                            n_sensors       =  n_sens_eng,
+                            waveform_length =  length_eng)
+
+    trk_writer = rwf_writer(h5out,
+                            group_name      =  group_name,
+                            compression     = compression,
+                            table_name      =    'sipmrd',
+                            n_sensors       =  n_sens_trk,
+                            waveform_length =  length_trk)
+
+    try:
+        evt_group = getattr(h5out.root, 'Run')
+    except tb.NoSuchNodeError:
+        evt_group = h5out.create_group(h5out.root, 'Run')
+
+    nexus_evt_tbl = h5out.create_table(evt_group, "events", EventInfo,
+                                       "event, timestamp & nexus evt for each index",
+                                       tbl.filters(compression))
+
+    def write_waveforms(nexus_evt      :        int ,
+                        wfs            : Tuple[List, List]) -> None:
+
+        eng, trk = wfs
+        row = nexus_evt_tbl.row
+        row["event_number"] = write_waveforms.counter
+        row["nexus_evt"]    = nexus_evt
+        row.append()
+
+        eng_writer(eng)
+        trk_writer(trk)
+
+        write_waveforms.counter += 1
+        
+    write_waveforms.counter = 0
+    return write_waveforms
+
+
 def load_sensors(file_names : List[str],
                  db_file    :      str ,
                  run_no     :      int ) -> Generator[Tuple, None, None]:
@@ -195,7 +250,7 @@ def load_hits(file_names : List[str]) -> Generator:
             for evt in event_ids:
                 yield dict(evt       = evt                ,
                            mc        = mc_info            ,
-                           timestamp = timestamp()        ,
+                           timestamp = timestamps         ,
                            hits      = hits_df.loc[evt, :])
 
 

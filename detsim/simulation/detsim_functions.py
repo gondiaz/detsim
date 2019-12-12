@@ -329,10 +329,7 @@ def histo(var, name = '', nbins = 100):
 # Driver
 #-----------------
 
-def generate_wfs(xs     : np.array,  # x positions of the energy deposits
-                 ys     : np.array,  # y positions
-                 zs     : np.array,  # z positions
-                 enes   : np.array,  # energy of the deposits
+def generate_wfs(hits   : np.array,
                  histos : bool = False) -> Tuple:
     """ Compute the WFs starting from the energy deposits
     Inputs:
@@ -348,6 +345,10 @@ def generate_wfs(xs     : np.array,  # x positions of the energy deposits
     Configuration: via the detsimparams unique instance.
         It can be updated via the configure method.
     """
+    xs   = hits.x
+    ys   = hits.y
+    zs   = hits.z
+    enes = hits.energy
 
     t0 = time.time()
     nes = generate_electrons(enes)
@@ -415,4 +416,5 @@ def generate_wfs(xs     : np.array,  # x positions of the energy deposits
     t3 = time.time()
     #if (histos):
     #    print('timing generate, pes, wfs', t1 - t0, t2 - t1, t3 - t2, ' s')
-    return (times_pmts, wfs_pmts), (times_sipms, wfs_sipms)
+    #return (times_pmts, wfs_pmts), (times_sipms, wfs_sipms)
+    return (wfs_pmts, wfs_sipms)
