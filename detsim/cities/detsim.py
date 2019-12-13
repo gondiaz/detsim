@@ -21,15 +21,15 @@ from typing    import  Callable
 from typing    import Generator
 from typing    import      List
 
-from detsim.io        .hdf5_io          import         wf_writer
-from detsim.io        .hdf5_io          import         load_hits
-from detsim.io        .hdf5_io          import     save_run_info
-from detsim.util      .util             import     trigger_times
-from detsim.simulation.buffer_functions import calculate_binning
-from detsim.simulation.buffer_functions import calculate_buffers
-from detsim.simulation.buffer_functions import    trigger_finder
-from detsim.simulation.detsim_functions import      generate_wfs
-from detsim.simulation.detsim_functions import      detsimparams
+from detsim.io        .hdf5_io          import                 wf_writer
+from detsim.io        .hdf5_io          import                 load_hits
+from detsim.io        .hdf5_io          import             save_run_info
+from detsim.util      .util             import             trigger_times
+from detsim.simulation.buffer_functions import         calculate_binning
+from detsim.simulation.buffer_functions import         calculate_buffers
+from detsim.simulation.buffer_functions import            trigger_finder
+from detsim.simulation.detsim_functions import get_function_generate_wfs
+from detsim.simulation.detsim_functions import              detsimparams
 
 from invisible_cities.core    .configure         import          configure
 from invisible_cities.core    .system_of_units_c import              units
@@ -52,12 +52,11 @@ def detsim(files_in, file_out, compression, event_range,
            detector_db, run_number):
 
     npmt, nsipm        = detsimparams.npmts, detsimparams.nsipms
-    pmt_wid, sipm_wid  = detsimparams.wf_pmt_bin_time, detsimparams.wf_sipm_bin_time 
+    pmt_wid, sipm_wid  = detsimparams.wf_pmt_bin_time, detsimparams.wf_sipm_bin_time
     nsamp_pmt          = int(detsimparams.wf_buffer_time / pmt_wid)
     nsamp_sipm         = int(detsimparams.wf_buffer_time / sipm_wid)
 
-    generate_wfs_      = fl.map(partial(generate_wfs,
-                                        histos = False),
+    generate_wfs_      = fl.map(get_function_generate_wfs(),
                                 args = ("hits"),
                                 out = ("wfs"))
 
