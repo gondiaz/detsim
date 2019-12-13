@@ -53,8 +53,8 @@ def detsim(files_in, file_out, compression, event_range,
 
     npmt, nsipm        = detsimparams.npmts, detsimparams.nsipms
     pmt_wid, sipm_wid  = detsimparams.wf_pmt_bin_time, detsimparams.wf_sipm_bin_time
-    nsamp_pmt          = int(detsimparams.wf_buffer_time / pmt_wid)
-    nsamp_sipm         = int(detsimparams.wf_buffer_time / sipm_wid)
+    nsamp_pmt          = int(detsimparams.wf_buffer_time // pmt_wid)
+    nsamp_sipm         = int(detsimparams.wf_buffer_time // sipm_wid)
 
     generate_wfs_      = fl.map(get_function_generate_wfs(),
                                 args = ("hits"),
