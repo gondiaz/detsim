@@ -186,11 +186,11 @@ def wf_writer(h5out, *,
         row["nexus_evt"]    = nexus_evt
         row.append()
 
-        eng_writer(eng)
-        trk_writer(trk)
+        eng_writer(eng.transpose())
+        trk_writer(trk.transpose())
 
         write_waveforms.counter += 1
-        
+
     write_waveforms.counter = 0
     return write_waveforms
 
