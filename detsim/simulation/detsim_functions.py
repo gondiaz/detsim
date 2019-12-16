@@ -92,6 +92,9 @@ class DetSimParameters(Singleton):
         self.EL_pmt_time_sample     =  self.wf_pmt_bin_time
         self.EL_sipm_time_sample    =  self.wf_sipm_bin_time
 
+        self.trigger_time           =  self.wf_buffer_time / 2.
+        self.S1_dtime               =  200 * units.ns
+
         if (detector == 'dummy'):
             self.dummy_detector()
         else:
@@ -230,8 +233,21 @@ psf_pmt  = lambda dx, dy : _psf(dx, dy, detsimparams.EP_z, factor = 25e3)
 
 psf_sipm = lambda dx, dy : _psf(dx, dy, detsimparams.TP_z, factor = 10.)
 
+psf_s1   = lambda dx, dy, dz: _psf(dx, dy, dz, factor = 25e3)
 
-def generate_EL_photons(electrons      : np.array,
+
+def generate_s1_photons(enes, ws: float = detsimparams.ws):
+    return enes / ws
+
+def estimate_s1_pes(xs, ys, zs, photons, psf = psf_s1):
+    dxs = xs[:, np.newaxis] - detsimparams.x_pmts
+    dys = ys[:, np.newaxis] - detsimparams.y_pmts
+    dzs = zs[:, np.newaxis] - detsimparams.EP_z
+    photons = photons[:, np.newaxis] + np.zeros_like(detsimparams.x_pmts)
+    pes = photons * psf(dxs, dys, dzs)
+    return pes
+
+def generate_s2_photons(electrons      : np.array,
                         el_gain        : float = detsimparams.el_gain,
                         el_gain_sigma  : float = detsimparams.el_gain_sigma):
     """ generate number of EL-photons produced by secondary electrons that reach
@@ -241,12 +257,12 @@ def generate_EL_photons(electrons      : np.array,
     return nphs
 
 
-def estimate_pes_at_sensors(xs        : np.array,  # nelectrons
-                            ys        : np.array,  # nelectrons
-                            photons   : np.array,  # nelectrons
-                            x_sensors : np.array,  # nsensors
-                            y_sensors : np.array,  # nsensors
-                            psf       : Callable) -> np.array:
+def estimate_s2_pes_at_sensors(xs        : np.array,  # nelectrons
+                               ys        : np.array,  # nelectrons
+                               photons   : np.array,  # nelectrons
+                               x_sensors : np.array,  # nsensors
+                               y_sensors : np.array,  # nsensors
+                               psf       : Callable) -> np.array:
     """ estimate the number of pes at sensors from the number of photons
     produced by electrons that reach the EL at xs, ys positions.
     It returns an array of pes with nelectrons x nsensors shape.
@@ -259,31 +275,38 @@ def estimate_pes_at_sensors(xs        : np.array,  # nelectrons
     return pes
 
 
-def estimate_pes_at_pmts(xs      : np.array,
-                         ys      : np.array,
-                         photons : np.array) -> np.array:
-    return estimate_pes_at_sensors(xs, ys, photons,
-                                   detsimparams.x_pmts, detsimparams.y_pmts, psf_pmt)
+def estimate_s2_pes_at_pmts(xs      : np.array,
+                            ys      : np.array,
+                            photons : np.array) -> np.array:
+    return estimate_s2_pes_at_sensors(xs, ys, photons,
+                                     detsimparams.x_pmts,
+                                     detsimparams.y_pmts, psf_pmt)
 
 
-def estimate_pes_at_sipms(xs      : np.array,
-                          ys      : np.array,
-                          photons : np.array) -> np.array:
-    return estimate_pes_at_sensors(xs, ys, photons,
-                                   detsimparams.x_sipms, detsimparams.y_sipms, psf_sipm)
+def estimate_s2_pes_at_sipms(xs      : np.array,
+                            ys      : np.array,
+                            photons : np.array) -> np.array:
+    return estimate_s2_pes_at_sensors(xs, ys, photons,
+                                     detsimparams.x_sipms,
+                                     detsimparams.y_sipms, psf_sipm)
+
+#
+# Trigger
+#------------------------
+
+def trigger_time(ts, pes, ttrigger = detsimparams.trigger_time):
+    return ttrigger - np.min(ts)
 
 #
 #  WFs
 #-----------
 
 
-def create_wfs(ts             : np.array, # nelectrons
-               pes            : np.array, # (nelectrons, nsensors)
-               wf_buffer_time : float = detsimparams.wf_buffer_time,
-               wf_bin_time    : float = detsimparams.wf_pmt_bin_time,
-               el_time_sample : float = detsimparams.EL_pmt_time_sample,
-               el_time        : float = detsimparams.EL_dtime,
-               adc_to_pes     : np.array = detsimparams.adc_to_pes_pmts): # nsensors
+def fill_wfs(ts          : np.array, # nelectrons
+             pes         : np.array, # (nelectrons, nsensors)
+             wfs         : np.array,  # (nwfsamples, nsensors)
+             wf_bin_time : float = detsimparams.wf_pmt_bin_time,
+             dt          : float = detsimparams.EL_dtime):
     """ create the wfs starting drom the pes produced per electrons and each sensor
     the control parameters are the wf_bin_time and the el_time_sample,
     by default they are the same parameters.
@@ -292,14 +315,8 @@ def create_wfs(ts             : np.array, # nelectrons
     Returns: time bins of the wf (nbins), and wfs contents (nbins, nsensors)
     """
 
-    nsize = int(el_time        // el_time_sample)
-    nbins = int(wf_buffer_time // wf_bin_time )
-
-    wftimes = wf_bin_time    * np.arange(nbins)
-    dts     = el_time_sample * np.arange(nsize)
-
-    nsensors  = 1 if len(pes.shape) == 1 else int(pes.shape[1])
-    wfs     = np.zeros((nbins, nsensors), dtype = int)
+    nsize = int(dt        // wf_bin_time)
+    dts   = wf_bin_time * np.arange(nsize)
 
     def _wf(its, ipes, iwf):
         # for each sensor, check if has pes, sample pes in EL times and fill wf
@@ -309,38 +326,52 @@ def create_wfs(ts             : np.array, # nelectrons
         sits, spes = bincounter(nts, wf_bin_time)
 
         spesn       = np.random.poisson(spes/nsize, size = (nsize, spes.size))
-        for k, kpes in enumerate(spesn):
-            kk =  int(k * el_time_sample / wf_bin_time)
+        for kk, kpes in enumerate(spesn):
+            #kk =  int(k * el_time_sample / wf_bin_time)
             iwf[sits + kk] = iwf[sits + kk] + kpes
         return iwf
 
     [_wf(ts, ipes, iwf) for ipes, iwf in zip(pes.T, wfs.T)]
 
-    return wftimes, wfs * adc_to_pes
+    return wfs
 
 
-create_wfs_pmts= create_wfs
+def fill_wfs_s1(ts, pes, wfs):
+    return fill_wfs(ts, pes, wfs,
+                    detsimparams.wf_pmt_bin_time,
+                    detsimparams.S1_dtime)
 
 
-def create_wfs_sipms(ts, pes,
-                         wf_buffer_time : float = detsimparams.wf_buffer_time,
-                         wf_bin_time    : float = detsimparams.wf_sipm_bin_time,
-                         el_time_sample : float = detsimparams.EL_sipm_time_sample,
-                         el_time        : float = detsimparams.EL_dtime,
-                         adc_to_pes     : np.array = detsimparams.adc_to_pes_sipms):
-    return create_wfs(ts, pes, wf_buffer_time, wf_bin_time,
-                      el_time_sample, el_time, adc_to_pes)
+def fill_wfs_s2_pmts(ts, pes, wfs):
+    return fill_wfs(ts, pes, wfs,
+                    detsimparams.wf_pmt_bin_time,
+                    detsimparams.EL_dtime)
+
+
+def fill_wfs_s2_sipms(ts, pes, wfs):
+    return fill_wfs(ts, pes, wfs,
+                    detsimparams.wf_sipm_bin_time,
+                    detsimparams.EL_dtime)
+
+#
+# Trigger
+#------------------------
+
+def find_trigger_time(ts, pes, ttrigger = detsimparams.trigger_time):
+    return ttrigger - np.min(ts)
 
 
 #
 # IC - function
 #--------------------
 
+
 def get_function_generate_wfs(detector         : str = 'new',
                               run_number       : int = -1,
                               wf_buffer_time   : float = detsimparams.wf_buffer_time,
                               wf_pmt_bin_time  : float = detsimparams.wf_pmt_bin_time,
                               wf_sipm_bin_time : float = detsimparams.wf_sipm_bin_time,
+                              trigger_time     : float = detsimparams.trigger_time,
                               voxel_xy_size    : float = detsimparams.voxel_sizes[0],
                               voxel_z_size     : float = detsimparams.voxel_sizes[2]
                              ) -> Tuple[np.array, np.array]:
@@ -350,23 +381,48 @@ def get_function_generate_wfs(detector         : str = 'new',
     dsim.wf_buffer_time   = wf_buffer_time
     dsim.wf_pmt_bin_time  = wf_pmt_bin_time
     dsim.wf_sipm_bin_time = wf_sipm_bin_time
-    
+    dsim.trigger_time     = trigger_time
+
+    npmts_bins  = int(dsim.wf_buffer_time // dsim.wf_pmt_bin_time)
+    npmts       = dsim.npmts
+
+    nsipms_bins = int(dsim.wf_buffer_time // dsim.wf_sipm_bin_time)
+    nsipms      = dsim.nsipms
+
+    drift_velocity    = dsim.drift_velocity
+
+    adc_to_pes_pmts   = dsim.adc_to_pes_pmts
+    adc_to_pes_sipms  = dsim.adc_to_pes_sipms
+
     def _generate_wfs(hits):
 
-        xs, ys, zs, enes       = get_deposits(hits)
+        xs, ys, zs, enes    = get_deposits(hits)
 
-        nes                    = generate_electrons(enes)
-        nes                    = drift_electrons(zs, nes)
-        dxs, dys, dzs, dnes    = diffuse_electrons(xs, ys, zs, nes)
+        nes                 = generate_electrons(enes)
+        nes                 = drift_electrons(zs, nes)
+        dxs, dys, dzs, dnes = diffuse_electrons(xs, ys, zs, nes)
 
-        dts                    = dzs / dsim.drift_velocity
-        photons                = generate_EL_photons(dnes)
+        dts                 = dzs / drift_velocity
+        s2photons           = generate_s2_photons(dnes)
+        pes_pmts            = estimate_s2_pes_at_pmts (dxs, dys, s2photons)
+        pes_sipms           = estimate_s2_pes_at_sipms(dxs, dys, s2photons)
 
-        pes_pmts               = estimate_pes_at_pmts (dxs, dys, photons)
-        pes_sipms              = estimate_pes_at_sipms(dxs, dys, photons)
+        s1photons           = generate_s1_photons(enes)
+        pes_s1              = estimate_s1_pes(xs, ys, zs, s1photons)
 
-        times_pmts, wfs_pmts   = create_wfs_pmts (dts, pes_pmts)
-        times_sipms, wfs_sipms = create_wfs_sipms(dts, pes_sipms)
+        t0                  = find_trigger_time(dts, pes_pmts)
+        t0s                 = t0 * np.ones_like(zs)
+        dts                 = t0 + dts
+
+        wfs_pmts            = np.zeros((npmts_bins, npmts), dtype = int)
+        fill_wfs_s1     (t0s, pes_s1  , wfs_pmts)
+        fill_wfs_s2_pmts(dts, pes_pmts, wfs_pmts)
+
+        wfs_sipms           = np.zeros((nsipms_bins, nsipms), dtype = int)
+        fill_wfs_s2_sipms(dts, pes_sipms, wfs_sipms)
+
+        wfs_pmts            = wfs_pmts  * adc_to_pes_pmts
+        sipms_pmts          = wfs_sipms * adc_to_pes_sipms
 
         return wfs_pmts, wfs_sipms
 
