@@ -53,9 +53,8 @@ def _psf(dx, dy, dz, factor = 1.):
     """
     return factor * np.abs(dz) / (2 * np.pi) / (dx**2 + dy**2 + dz**2)**1.5
 
-def get_psf_pmt_from_krmap(filename):
+def get_psf_pmt_from_krmap(filename, norma = 1e7):
 
-    #print('filename: ', filename)
     maps = read_maps(filename)
 
     xmin = maps.mapinfo.xmin
@@ -71,7 +70,7 @@ def get_psf_pmt_from_krmap(filename):
     mape0  = np.array(maps.e0)
     mape0  = np.nan_to_num(mape0, 0.)
 
-    def _psf(x, y, norma = 1e7):
+    def _psf(x, y, norma = norma):
         x = np.clip(x, xmin, xmax)
         y = np.clip(y, ymin, ymax)
         ix = ((x  - xmin) // dx).astype(int)
@@ -83,9 +82,9 @@ def get_psf_pmt_from_krmap(filename):
 
 psf_pmt  = lambda dx, dy : _psf(dx, dy, detsimparams.EP_z, factor = 25e3)
 
-psf_sipm = lambda dx, dy : _psf(dx, dy, detsimparams.TP_z, factor = 1.)
+psf_sipm = lambda dx, dy : _psf(dx, dy, detsimparams.TP_z, factor = 0.15)
 
-psf_s1   = lambda dx, dy, dz: _psf(dx, dy, dz, factor = 25e3)
+psf_s1   = lambda dx, dy, dz: _psf(dx, dy, dz, factor = 1e3)
 
 
 #
@@ -148,10 +147,6 @@ class DetSimParameters(Singleton):
             self.load_detector(detector, run_number)
 
         self.load_psf(krmap_filename)
-        #print('krmap_filename ', krmap_filename)
-        #self.psf_pmt    = psf_pmt if krmap_filename == '' else get_psf_pmt_from_krmap(krmap_filename)
-        #self.psf_sipm   = psf_sipm
-        #self.psf_s1     = psf_s1
 
 
     def dummy_detector(self):
@@ -188,8 +183,9 @@ class DetSimParameters(Singleton):
 
 
     def load_psf(self, krmap_filename = ''):
-        print('load psf: krmap_filename: ', krmap_filename)
-        self.psf_pmt    = psf_pmt if krmap_filename == '' else get_psf_pmt_from_krmap(krmap_filename)
+        nphotons = (41.5 * units.keV / self.wi) * self.el_gain * self.npmts
+        print('load psf from file : ', krmap_filename)
+        self.psf_pmt    = psf_pmt if krmap_filename == '' else get_psf_pmt_from_krmap(krmap_filename, nphotons)
         self.psf_sipm   = psf_sipm
         self.psf_s1     = psf_s1
 
@@ -293,6 +289,7 @@ def estimate_s1_pes(xs, ys, zs, photons, psf = detsimparams.psf_s1):
     dzs = zs[:, np.newaxis] - detsimparams.EP_z
     photons = photons[:, np.newaxis] + np.zeros_like(detsimparams.x_pmts)
     pes = photons * psf(dxs, dys, dzs)
+    pes = np.random.poisson(pes)
     return pes
 
 def generate_s2_photons(electrons      : np.array,
@@ -319,7 +316,7 @@ def estimate_s2_pes_at_sensors(xs        : np.array,  # nelectrons
     dys     = ys[:, np.newaxis] - y_sensors
     photons = photons[:, np.newaxis] + np.zeros_like(x_sensors)
     pes     = photons * psf(dxs, dys)
-    #pes = np.random.poisson(pes)
+    pes     = np.random.poisson(pes)
     return pes
 
 
@@ -372,7 +369,8 @@ def fill_wfs(ts          : np.array, # nelectrons
         # for each sensor, check if has pes, sample pes in EL times and fill wf
         if (np.sum(ipes) <= 0): return iwf
 
-        nts        = np.repeat(its, ipes.astype(int))
+        #nts        = np.repeat(its, np.random.poisson(ipes))
+        nts        = np.repeat(its, ipes)
         sits, spes = bincounter(nts, wf_bin_time)
 
         spesn       = np.random.poisson(spes/nsize, size = (nsize, spes.size))
