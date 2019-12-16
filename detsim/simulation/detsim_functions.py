@@ -19,6 +19,8 @@ import invisible_cities.core    .system_of_units_c as system_of_units
 import invisible_cities.core    .fit_functions     as fitf
 import invisible_cities.database.load_db           as db
 
+from invisible_cities.reco.corrections_new import read_maps
+
 import matplotlib.pyplot as plt
 
 units = system_of_units.SystemOfUnits()
@@ -42,6 +44,49 @@ def bincounterdd(xxs, dxs = 1., x0s = 0., n = 1000):
     ids, ccs =  np.unique(ixs, axis = 0, return_counts = True)
     return ids.T, ccs
 
+#
+#  PSFs
+#---------------------------------
+
+def _psf(dx, dy, dz, factor = 1.):
+    """ generic analytic PSF function
+    """
+    return factor * np.abs(dz) / (2 * np.pi) / (dx**2 + dy**2 + dz**2)**1.5
+
+def get_psf_pmt_from_krmap(filename):
+
+    #print('filename: ', filename)
+    maps = read_maps(filename)
+
+    xmin = maps.mapinfo.xmin
+    xmax = maps.mapinfo.xmax
+    ymin = maps.mapinfo.ymin
+    ymax = maps.mapinfo.ymax
+    nx   = maps.mapinfo.nx
+    ny   = maps.mapinfo.ny
+
+    dx   = (xmax - xmin)/ float(nx)
+    dy   = (ymax - ymin)/ float(ny)
+
+    mape0  = np.array(maps.e0)
+    mape0  = np.nan_to_num(mape0, 0.)
+
+    def _psf(x, y, norma = 1e7):
+        x = np.clip(x, xmin, xmax)
+        y = np.clip(y, ymin, ymax)
+        ix = ((x  - xmin) // dx).astype(int)
+        iy = ((y  - ymin) // dy).astype(int)
+        return mape0[ix, iy] / norma
+
+    return _psf
+
+
+psf_pmt  = lambda dx, dy : _psf(dx, dy, detsimparams.EP_z, factor = 25e3)
+
+psf_sipm = lambda dx, dy : _psf(dx, dy, detsimparams.TP_z, factor = 1.)
+
+psf_s1   = lambda dx, dy, dz: _psf(dx, dy, dz, factor = 25e3)
+
 
 #
 # Configuration
@@ -64,7 +109,9 @@ class DetSimParameters(Singleton):
     and re-voxelization size (mm) of the diffused electrons
     """
 
-    def __init__(self, detector = 'new', run_number = -1):
+    def __init__(self, detector = 'new',
+                 run_number = -1,
+                 krmap_filename = ''):
 
         self.ws                     = 60.0 * units.eV
         self.wi                     = 22.4 * units.eV
@@ -98,7 +145,14 @@ class DetSimParameters(Singleton):
         if (detector == 'dummy'):
             self.dummy_detector()
         else:
-            self.next_detector(detector, run_number)
+            self.load_detector(detector, run_number)
+
+        self.load_psf(krmap_filename)
+        #print('krmap_filename ', krmap_filename)
+        #self.psf_pmt    = psf_pmt if krmap_filename == '' else get_psf_pmt_from_krmap(krmap_filename)
+        #self.psf_sipm   = psf_sipm
+        #self.psf_s1     = psf_s1
+
 
     def dummy_detector(self):
 
@@ -118,7 +172,7 @@ class DetSimParameters(Singleton):
         self.adc_to_pes_sipms = np.ones(self.nsipms)
 
 
-    def next_detector(self, detector = 'new', run_number = -1):
+    def load_detector(self, detector = 'new', run_number = -1):
 
         db_pmts  = db.DataPMT (detector, run_number)
         self.x_pmts          = db_pmts['X']         .values
@@ -131,6 +185,13 @@ class DetSimParameters(Singleton):
         self.y_sipms          = db_sipms['Y']         .values
         self.adc_to_pes_sipms = db_sipms['adc_to_pes'].values
         self.nsipms           = len(self.x_sipms)
+
+
+    def load_psf(self, krmap_filename = ''):
+        print('load psf: krmap_filename: ', krmap_filename)
+        self.psf_pmt    = psf_pmt if krmap_filename == '' else get_psf_pmt_from_krmap(krmap_filename)
+        self.psf_sipm   = psf_sipm
+        self.psf_s1     = psf_s1
 
 
     def configure(self, **kargs):
@@ -223,23 +284,10 @@ def diffuse_electrons(xs                     : np.array,
 #  EL photons and pes at sensors
 #---------------------------------
 
-def _psf(dx, dy, dz, factor = 1.):
-    """ generic analytic PSF function
-    """
-    return factor * np.abs(dz) / (2 * np.pi) / (dx**2 + dy**2 + dz**2)**1.5
-
-
-psf_pmt  = lambda dx, dy : _psf(dx, dy, detsimparams.EP_z, factor = 25e3)
-
-psf_sipm = lambda dx, dy : _psf(dx, dy, detsimparams.TP_z, factor = 10.)
-
-psf_s1   = lambda dx, dy, dz: _psf(dx, dy, dz, factor = 25e3)
-
-
 def generate_s1_photons(enes, ws: float = detsimparams.ws):
     return enes / ws
 
-def estimate_s1_pes(xs, ys, zs, photons, psf = psf_s1):
+def estimate_s1_pes(xs, ys, zs, photons, psf = detsimparams.psf_s1):
     dxs = xs[:, np.newaxis] - detsimparams.x_pmts
     dys = ys[:, np.newaxis] - detsimparams.y_pmts
     dzs = zs[:, np.newaxis] - detsimparams.EP_z
@@ -279,8 +327,9 @@ def estimate_s2_pes_at_pmts(xs      : np.array,
                             ys      : np.array,
                             photons : np.array) -> np.array:
     return estimate_s2_pes_at_sensors(xs, ys, photons,
-                                     detsimparams.x_pmts,
-                                     detsimparams.y_pmts, psf_pmt)
+                                     np.zeros_like(detsimparams.x_pmts),
+                                     np.zeros_like(detsimparams.y_pmts),
+                                     detsimparams.psf_pmt)
 
 
 def estimate_s2_pes_at_sipms(xs      : np.array,
@@ -288,7 +337,8 @@ def estimate_s2_pes_at_sipms(xs      : np.array,
                             photons : np.array) -> np.array:
     return estimate_s2_pes_at_sensors(xs, ys, photons,
                                      detsimparams.x_sipms,
-                                     detsimparams.y_sipms, psf_sipm)
+                                     detsimparams.y_sipms,
+                                     detsimparams.psf_sipm)
 
 #
 # Trigger
@@ -368,6 +418,7 @@ def find_trigger_time(ts, pes, ttrigger = detsimparams.trigger_time):
 
 def get_function_generate_wfs(detector         : str = 'new',
                               run_number       : int = -1,
+                              krmap_filename   : str = '',
                               wf_buffer_time   : float = detsimparams.wf_buffer_time,
                               wf_pmt_bin_time  : float = detsimparams.wf_pmt_bin_time,
                               wf_sipm_bin_time : float = detsimparams.wf_sipm_bin_time,
@@ -376,7 +427,7 @@ def get_function_generate_wfs(detector         : str = 'new',
                               voxel_z_size     : float = detsimparams.voxel_sizes[2]
                              ) -> Tuple[np.array, np.array]:
 
-    dsim                  = DetSimParameters(detector, run_number)
+    dsim                  = DetSimParameters(detector, run_number, krmap_filename)
     dsim.voxel_sizes      = np.array((voxel_xy_size, voxel_xy_size, voxel_z_size))
     dsim.wf_buffer_time   = wf_buffer_time
     dsim.wf_pmt_bin_time  = wf_pmt_bin_time
