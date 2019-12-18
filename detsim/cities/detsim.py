@@ -49,14 +49,15 @@ from invisible_cities.cities.components import city
 
 @city
 def detsim(files_in, file_out, compression, event_range,
-           detector_db, run_number):
+           detector_db, run_number, krmap_filename, psfsipm_filename):
 
     npmt, nsipm        = detsimparams.npmts, detsimparams.nsipms
     pmt_wid, sipm_wid  = detsimparams.wf_pmt_bin_time, detsimparams.wf_sipm_bin_time
     nsamp_pmt          = int(detsimparams.wf_buffer_time // pmt_wid)
     nsamp_sipm         = int(detsimparams.wf_buffer_time // sipm_wid)
 
-    generate_wfs_      = fl.map(get_function_generate_wfs(),
+    generate_wfs_      = fl.map(get_function_generate_wfs(krmap_filename = krmap_filename,
+                                                          psfsipm_filename = psfsipm_filename),
                                 args = ("hits"),
                                 out = ("wfs"))
 
