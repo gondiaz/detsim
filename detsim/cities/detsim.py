@@ -29,7 +29,7 @@ from detsim.simulation.buffer_functions import         calculate_binning
 from detsim.simulation.buffer_functions import         calculate_buffers
 from detsim.simulation.buffer_functions import            trigger_finder
 from detsim.simulation.detsim_functions import get_function_generate_wfs
-from detsim.simulation.detsim_functions import              detsimparams
+from detsim.simulation.detsim_functions import                      dsim
 
 from invisible_cities.core    .configure         import          configure
 from invisible_cities.core    .system_of_units_c import              units
@@ -51,10 +51,10 @@ from invisible_cities.cities.components import city
 def detsim(files_in, file_out, compression, event_range,
            detector_db, run_number, krmap_filename, psfsipm_filename):
 
-    npmt, nsipm        = detsimparams.npmts, detsimparams.nsipms
-    pmt_wid, sipm_wid  = detsimparams.wf_pmt_bin_time, detsimparams.wf_sipm_bin_time
-    nsamp_pmt          = int(detsimparams.wf_buffer_time // pmt_wid)
-    nsamp_sipm         = int(detsimparams.wf_buffer_time // sipm_wid)
+    npmt, nsipm        = dsim.npmts, dsim.nsipms
+    pmt_wid, sipm_wid  = dsim.wf_pmt_bin_time, dsim.wf_sipm_bin_time
+    nsamp_pmt          = int(dsim.wf_buffer_time // pmt_wid)
+    nsamp_sipm         = int(dsim.wf_buffer_time // sipm_wid)
 
     generate_wfs_      = fl.map(get_function_generate_wfs(krmap_filename = krmap_filename,
                                                           psfsipm_filename = psfsipm_filename),
